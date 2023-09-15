@@ -3,7 +3,7 @@ from pathlib import Path
 import torch.nn.functional as F
 from torch import version as torch_version
 
-from modules import RoPE, shared
+from modules import shared
 from modules.logging_colors import logger
 from modules.models import clear_torch_cache
 from modules.text_generation import get_max_prompt_length
@@ -107,6 +107,11 @@ class ExllamaModel:
             self.generator.disallow_tokens([self.tokenizer.eos_token_id])
         else:
             self.generator.disallow_tokens(None)
+
+        if state['custom_token_bans']:
+            to_ban = [int(x) for x in state['custom_token_bans'].split(',')]
+            if len(to_ban) > 0:
+                self.generator.disallow_tokens(self.tokenizer, to_ban)
 
         # Case 1: no CFG
         if state['guidance_scale'] == 1:
