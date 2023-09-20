@@ -121,14 +121,28 @@ class LlamacppHF(PreTrainedModel):
             seq = past_key_values + seq
 
         seq_tensor = torch.tensor(seq)
+        reset = True
 
-        # Make the forward call
+        # Make the forward call. The prefix-match code has been adapted from
+        # https://github.com/abetlen/llama-cpp-python/commit/f4090a0bb2a2a25acfe28d31c82cc1aa273bedee
         if labels is None:
-            if past_seq is None or not torch.equal(past_seq, seq_tensor[:-1]):
+            if past_seq is not None:
+                min_length = min(past_seq.shape[0], seq_tensor.shape[0])
+                indices = torch.nonzero(~torch.eq(past_seq[:min_length], seq_tensor[:min_length]))
+                if len(indices) > 0:
+                    longest_prefix = indices[0].item()
+                else:
+                    longest_prefix = min_length
+
+                if longest_prefix > 0:
+                    reset = False
+                    self.model.n_tokens = longest_prefix
+                    if len(seq_tensor) - longest_prefix > 0:
+                        self.model.eval(seq[longest_prefix:])
+
+            if reset:
                 self.model.reset()
                 self.model.eval(seq)
-            else:
-                self.model.eval([seq[-1]])
 
             logits = torch.tensor(self.model.scores[self.model.n_tokens - 1, :]).view(1, 1, -1).to(input_ids.device)
         else:
